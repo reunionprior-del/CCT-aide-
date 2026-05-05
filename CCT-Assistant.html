@@ -917,27 +917,30 @@ function stopRecording() {
 }
 
 async function sendToClaude(transcription) {
-  const systemPrompt = `Tu es l'assistant d'un optométriste qui dicte ses mesures pendant une consultation d'adaptation lentilles de contact.
+  const systemPrompt = `Tu es l'assistant d'un optométriste (fiche CCT adaptation lentilles). Extrais les mesures dictées et retourne UNIQUEMENT du JSON valide, rien d'autre, sans backticks.
 
-Ton rôle : extraire les mesures et identifier les champs correspondants dans la fiche CCT.
+Format de réponse STRICT :
+{"confirmation":"✓","fields":[{"id":"id_champ","value":"valeur"}]}
 
-Réponds UNIQUEMENT en JSON :
-{
-  "confirmation": "✓" si données extraites, "?" si incompris, ou réponse 1-2 mots si c'est une question,
-  "fields": [{"id": "id_exact", "value": "valeur"}]
-}
+Si rien à extraire : {"confirmation":"?","fields":[]}
 
-IDs disponibles : av_od_vl, av_od_vp, av_od_confort, av_og_vl, av_og_vp, av_og_confort, av_odg_vl, av_odg_vp, av_odg_confort, k_od_kerat, k_od_ast_corn, k_od_ast_tot, k_od_ast_int, k_od_exc, k_og_kerat, k_og_ast_corn, k_og_ast_tot, k_og_ast_int, k_og_exc, bio_od_dhiv, bio_od_pup, bio_od_fp, bio_od_rec, bio_od_psc, bio_od_tonus, bio_od_amp, bio_od_freq, bio_og_dhiv, bio_og_pup, bio_og_fp, bio_og_rec, bio_og_psc, bio_og_tonus, bio_og_amp, bio_og_freq, bm_hautrl, bm_but, bm_film, bm_endo, bm_paupieres, bm_retournement, bm_conjonctive, bm_limbe, bm_cornee, e_fabricant, e_nom, e_puiss_od, e_puiss_og, e_rayon_od, e_rayon_og, e_diam_od, e_diam_og, e_mat, e_dke, e_port, e_renouv, e_centrage_od, e_centrage_og, e_mobilite_od, e_mobilite_og, e_confort_od, e_confort_og, conclu_choix, conclu_conseils
+IDs des champs :
+AV: av_od_vl, av_od_vp, av_od_confort, av_og_vl, av_og_vp, av_og_confort, av_odg_vl, av_odg_vp, av_odg_confort
+Kerato: k_od_kerat, k_od_ast_corn, k_od_ast_tot, k_od_ast_int, k_od_exc, k_og_kerat, k_og_ast_corn, k_og_ast_tot, k_og_ast_int, k_og_exc
+Bio: bio_od_dhiv, bio_od_pup, bio_od_fp, bio_od_rec, bio_od_psc, bio_od_tonus, bio_od_amp, bio_od_freq, bio_og_dhiv, bio_og_pup, bio_og_fp, bio_og_rec, bio_og_psc, bio_og_tonus, bio_og_amp, bio_og_freq
+Biomicro: bm_hautrl, bm_but, bm_film, bm_endo, bm_paupieres, bm_retournement, bm_conjonctive, bm_limbe, bm_cornee
+Essai: e_fabricant, e_nom, e_puiss_od, e_puiss_og, e_rayon_od, e_rayon_og, e_diam_od, e_diam_og, e_mat, e_dke, e_port, e_renouv, e_centrage_od, e_centrage_og, e_mobilite_od, e_mobilite_og, e_confort_od, e_confort_og
+Conclusion: conclu_choix, conclu_conseils
 
-Exemples :
-- "OD kératométrie 7.8 sur 7.6" → {"id":"k_od_kerat","value":"7.8 / 7.6"}
-- "BUT 8 secondes OD" → {"id":"bm_but","value":"8s"}
-- "acuité de loin OD 10 sur 10" → {"id":"av_od_vl","value":"10/10"}
-- "lentille Cooper Vision Biofinity" → [{"id":"e_fabricant","value":"CooperVision"},{"id":"e_nom","value":"Biofinity"}]`;
-
-  conversationHistory.push({ role: "user", content: transcription });
+Exemples: "OD kerato 7.8 sur 7.6" -> k_od_kerat="7.8/7.6" | "BUT 8s" -> bm_but="8s" | "AV VL OD 10/10" -> av_od_vl="10/10"`;
 
   try {
+    if (!apiKey || apiKey.length < 20) {
+      setFeedback('🔑', 'Clé API manquante !');
+      addLog('Erreur', 'Clé API non renseignée');
+      return;
+    }
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -947,12 +950,20 @@ Exemples :
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 800,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
         system: systemPrompt,
-        messages: conversationHistory
+        messages: [{ role: "user", content: transcription }]
       })
     });
+
+    if (!response.ok) {
+      const errData = await response.json();
+      const errMsg = errData?.error?.message || response.status;
+      setFeedback('❌', 'Erreur API');
+      addLog('Erreur ' + response.status, errMsg.slice(0, 60));
+      return;
+    }
 
     const data = await response.json();
     const rawText = data.content?.[0]?.text || '{}';
@@ -963,10 +974,8 @@ Exemples :
       parsed = JSON.parse(clean);
     } catch {
       parsed = { confirmation: '?', fields: [] };
+      addLog('Parse erreur', rawText.slice(0, 40));
     }
-
-    conversationHistory.push({ role: "assistant", content: rawText });
-    if (conversationHistory.length > 24) conversationHistory = conversationHistory.slice(-20);
 
     if (parsed.fields && parsed.fields.length > 0) {
       parsed.fields.forEach(f => {
@@ -988,8 +997,8 @@ Exemples :
     speakConfirmation(conf);
 
   } catch(err) {
-    setFeedback('❌', 'Erreur');
-    addLog('Erreur API', err.message);
+    setFeedback('❌', 'Erreur réseau');
+    addLog('Erreur réseau', err.message.slice(0, 60));
   }
 }
 
