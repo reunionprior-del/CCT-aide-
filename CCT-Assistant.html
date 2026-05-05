@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>CCT Lentilles — Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e14;
+    --surface: #111720;
+    --border: #1e2a38;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --ok: #00ff88;
+    --warn: #ff6b35;
+    --text: #e8f0f8;
+    --muted: #4a6080;
+    --card: #141c28;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* GRID BG */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; max-width: 480px; margin: 0 auto; padding: 16px; }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 0 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  .logo { font-size: 11px; font-family: 'DM Mono', monospace; color: var(--accent); letter-spacing: 0.15em; text-transform: uppercase; }
+  .logo span { color: var(--muted); }
+  .session-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+
+  /* PATIENT BAR */
+  .patient-bar {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    gap: 12px;
+  }
+  .patient-bar input {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    outline: none;
+    flex: 1;
+  }
+  .patient-bar input::placeholder { color: var(--muted); }
+  .patient-bar input:first-child { border-right: 1px solid var(--border); padding-right: 12px; }
+
+  /* MIC ZONE */
+  .mic-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 28px 20px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .mic-zone::after {
+    content: '';
+    position: absolute;
+    top: -60px; left: 50%; transform: translateX(-50%);
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(0,229,255,0.06) 0%, transparent 70%);
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .mic-zone.active::after { opacity: 2; }
+
+  .mic-btn {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 32px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .mic-btn:hover { border-color: var(--accent); }
+  .mic-btn.recording {
+    border-color: var(--warn);
+    background: rgba(255,107,53,0.1);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  .mic-btn.processing {
+    border-color: var(--accent2);
+    background: rgba(124,58,237,0.1);
+  }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,107,53,0.4); }
+    50% { box-shadow: 0 0 0 16px rgba(255,107,53,0); }
+  }
+
+  .mic-label {
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* FEEDBACK BUBBLE — LE COEUR DU PROJET */
+  .feedback {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    transition: all 0.3s;
+  }
+  .feedback.ok { animation: bounceIn 0.4s; }
+  .feedback.thinking { animation: spin 1s linear infinite; display: inline-block; }
+
+  @keyframes bounceIn {
+    0% { transform: scale(0.5); opacity: 0; }
+    70% { transform: scale(1.2); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  /* TRANSCRIPT */
+  .transcript {
+    background: rgba(0,229,255,0.04);
+    border: 1px solid rgba(0,229,255,0.15);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    width: 100%;
+    min-height: 36px;
+    line-height: 1.5;
+    text-align: center;
+  }
+  .transcript.empty { color: var(--muted); }
+
+  /* SECTIONS */
+  .sections { display: flex; flex-direction: column; gap: 12px; }
+
+  .section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .section-header {
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
+  }
+  .section-header:hover { background: rgba(255,255,255,0.02); }
+  .section.open .section-header { border-bottom-color: var(--border); }
+
+  .section-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  .section-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .fill-count {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--ok);
+    background: rgba(0,255,136,0.08);
+    border: 1px solid rgba(0,255,136,0.2);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .fill-count.zero { color: var(--muted); background: transparent; border-color: var(--border); }
+  .chevron { font-size: 10px; color: var(--muted); transition: transform 0.2s; }
+  .section.open .chevron { transform: rotate(180deg); }
+
+  .section-body { display: none; padding: 14px 16px; }
+  .section.open .section-body { display: block; }
+
+  /* FIELDS */
+  .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .field-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .field label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .field input, .field textarea {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+  .field input:focus, .field textarea:focus { border-color: var(--accent); }
+  .field input.filled { border-color: rgba(0,255,136,0.3); background: rgba(0,255,136,0.04); }
+  .field textarea { resize: none; min-height: 56px; }
+
+  .field-full { grid-column: 1 / -1; }
+
+  .eye-section-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin: 12px 0 8px;
+  }
+  .eye-section-title:first-child { margin-top: 0; }
+
+  /* LOG */
+  .log {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-top: 12px;
+  }
+  .log-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 10px;
+  }
+  .log-entries { display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto; }
+  .log-entry {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .log-entry .time { color: var(--accent2); flex-shrink: 0; }
+  .log-entry .msg { color: var(--text); }
+
+  /* EXPORT BTN */
+  .export-btn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--accent2), #4f46e5);
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    margin-top: 16px;
+    transition: opacity 0.2s;
+  }
+  .export-btn:hover { opacity: 0.85; }
+
+  /* API KEY */
+  .api-setup {
+    background: var(--card);
+    border: 1px solid rgba(255,107,53,0.3);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .api-setup p { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  .api-setup input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    outline: none;
+  }
+  .api-setup input:focus { border-color: var(--accent); }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">CCT <span>/</span> Lentilles</div>
+    <div class="session-badge" id="sessionTime">Session: --:--</div>
+  </header>
+
+  <!-- API KEY -->
+  <div class="api-setup" id="apiSetup">
+    <p>🔑 Entre ta clé API Anthropic pour activer l'assistant vocal. Elle reste dans ton navigateur uniquement.</p>
+    <input type="password" id="apiKey" placeholder="sk-ant-..." oninput="saveKey(this.value)">
+  </div>
+
+  <!-- PATIENT -->
+  <div class="patient-bar">
+    <input type="text" id="patientPseudo" placeholder="Pseudo patient" oninput="updateSession()">
+    <input type="text" id="patientDob" placeholder="DDN" oninput="updateSession()">
+  </div>
+
+  <!-- MIC ZONE -->
+  <div class="mic-zone" id="micZone">
+    <div class="transcript empty" id="transcript">Appuie sur le micro et dicte tes mesures…</div>
+    <button class="mic-btn" id="micBtn" onclick="toggleMic()">🎤</button>
+    <div class="feedback" id="feedback">　</div>
+    <div class="mic-label" id="micLabel">Appuyer pour dicter</div>
+  </div>
+
+  <!-- SECTIONS FICHE CCT -->
+  <div class="sections" id="sections">
+
+    <!-- AV BRUT -->
+    <div class="section" id="sec-av">
+      <div class="section-header" onclick="toggleSection('av')">
+        <div class="section-title">AV Brut</div>
+        <div class="section-meta">
+          <span class="fill-count zero" id="count-av">0 champs</span>
+          <span class="chevron">▼</span>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="eye-section-title">OD</div>
+        <div class="field-grid three">
+          <div class="field"><label>AV VL</label><input id="av_od_vl" data-label="AV VL OD" type="text"></div>
+          <div class="field"><label>AV VP</label><input id="av_od_vp" data-label="AV VP OD" type="text"></div>
+          <div class="field"><label>Confort</label><input id="av_od_confort" data-label="Confort OD" type="text"></div>
+        </div>
+        <div class="eye-section-title">OG</div>
+        <div class="field-grid three">
+          <div class="field"><label>AV VL</label><input id="av_og_vl" data-label="AV VL OG" type="text"></div>
+          <div class="field"><label>AV VP</label><input id="av_og_vp" data-label="AV VP OG" type="text"></div>
+          <div class="field"><label>Confort</label><input id="av_og_confort" data-label="Confort OG" type="text"></div>
+        </div>
+        <div class="eye-section-title">ODG</div>
+        <div class="field-grid three">
+          <div class="field"><label>AV VL</label><input id="av_odg_vl" data-label="AV VL ODG" type="text"></div>
+          <div class="field"><label>AV VP</label><input id="av_odg_vp" data-label="AV VP ODG" type="text"></div>
+          <div class="field"><label>Confort</label><input id="av_odg_confort" data-label="Confort ODG" type="text"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KÉRATOMÈTRE -->
+    <div class="section" id="sec-kerato">
+      <div class="section-header" onclick="toggleSection('kerato')">
+        <div class="section-title">Kératométrie</div>
+        <div class="section-meta">
+          <span class="fill-count zero" id="count-kerato">0 champs</span>
+          <span class="chevron">▼</span>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="eye-section-title">OD</div>
+        <div class="field-grid">
+          <div class="field"><label>Kératométrie</label><input id="k_od_kerat" data-label="Kératométrie OD" type="text" placeholder="7.8 / 7.6"></div>
+          <div class="field"><label>Ast cornéen</label><input id="k_od_ast_corn" data-label="Astigmatisme cornéen OD" type="text"></div>
+          <div class="field"><label>Ast total</label><input id="k_od_ast_tot" data-label="Astigmatisme total OD" type="text"></div>
+          <div class="field"><label>Ast interne</label><input id="k_od_ast_int" data-label="Astigmatisme interne OD" type="text"></div>
+          <div class="field"><label>Excentricité</label><input id="k_od_exc" data-label="Excentricité OD" type="text"></div>
+        </div>
+        <div class="eye-section-title">OG</div>
+        <div class="field-grid">
+          <div class="field"><label>Kératométrie</label><input id="k_og_kerat" data-label="Kératométrie OG" type="text" placeholder="7.8 / 7.6"></div>
+          <div class="field"><label>Ast cornéen</label><input id="k_og_ast_corn" data-label="Astigmatisme cornéen OG" type="text"></div>
+          <div class="field"><label>Ast total</label><input id="k_og_ast_tot" data-label="Astigmatisme total OG" type="text"></div>
+          <div class="field"><label>Ast interne</label><input id="k_og_ast_int" data-label="Astigmatisme interne OG" type="text"></div>
+          <div class="field"><label>Excentricité</label><input id="k_og_exc" data-label="Excentricité OG" type="text"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BIOMÉTRIE -->
+    <div class="section" id="sec-bio">
+      <div class="section-header" onclick="toggleSection('bio')">
+        <div class="section-title">Biométrie</div>
+        <div class="section-meta">
+          <span class="fill-count zero" id="count-bio">0 champs</span>
+          <span class="chevron">▼</span>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="eye-section-title">OD</div>
+        <div class="field-grid">
+          <div class="field"><label>DHIV</label><input id="bio_od_dhiv" data-label="DHIV OD" type="text"></div>
+          <div class="field"><label>Ø PUP</label><input id="bio_od_pup" data-label="Diamètre pupille OD" type="text"></div>
+          <div class="field"><label>FP</label><input id="bio_od_fp" data-label="FP OD" type="text"></div>
+          <div class="field"><label>Recouvrement sup</label><input id="bio_od_rec" data-label="Recouvrement supérieur OD" type="text"></div>
+          <div class="field"><label>PSC</label><input id="bio_od_psc" data-label="PSC OD" type="text"></div>
+          <div class="field"><label>Tonus P.</label><input id="bio_od_tonus" data-label="Tonus palpébral OD" type="text"></div>
+          <div class="field"><label>Amplitude clignt</label><input id="bio_od_amp" data-label="Amplitude clignement OD" type="text"></div>
+          <div class="field"><label>Fréquence clignt</label><input id="bio_od_freq" data-label="Fréquence clignement OD" type="text"></div>
+        </div>
+        <div class="eye-section-title">OG</div>
+        <div class="field-grid">
+          <div class="field"><label>DHIV</label><input id="bio_og_dhiv" data-label="DHIV OG" type="text"></div>
+          <div class="field"><label>Ø PUP</label><input id="bio_og_pup" data-label="Diamètre pupille OG" type="text"></div>
+          <div class="field"><label>FP</label><input id="bio_og_fp" data-label="FP OG" type="text"></div>
+          <div class="field"><label>Recouvrement sup</label><input id="bio_og_rec" data-label="Recouvrement supérieur OG" type="text"></div>
+          <div class="field"><label>PSC</label><input id="bio_og_psc" data-label="PSC OG" type="text"></div>
+          <div class="field"><label>Tonus P.</label><input id="bio_og_tonus" data-label="Tonus palpébral OG" type="text"></div>
+          <div class="field"><label>Amplitude clignt</label><input id="bio_og_amp" data-label="Amplitude clignement OG" type="text"></div>
+          <div class="field"><label>Fréquence clignt</label><input id="bio_og_freq" data-label="Fréquence clignement OG" type="text"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BIOMICROSCOPIE -->
+    <div class="section" id="sec-biomicro">
+      <div class="section-header" onclick="toggleSection('biomicro')">
+        <div class="section-title">Biomicroscopie</div>
+        <div class="section-meta">
+          <span class="fill-count zero" id="count-biomicro">0 champs</span>
+          <span class="chevron">▼</span>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="field-grid">
+          <div class="field"><label>Hauteur RL</label><input id="bm_hautrl" data-label="Hauteur et régularité RL" type="text"></div>
+          <div class="field"><label>BUT</label><input id="bm_but" data-label="BUT" type="text"></div>
+          <div class="field"><label>Film de larme</label><input id="bm_film" data-label="Film de larme" type="text"></div>
+          <div class="field"><label>Endothélium</label><input id="bm_endo" data-label="Endothélium" type="text"></div>
+          <div class="field"><label>Diffus paupières</label><input id="bm_paupieres" data-label="Diffus paupières" type="text"></div>
+          <div class="field"><label>Retournement palp.</label><input id="bm_retournement" data-label="Retournement palpébral" type="text"></div>
+          <div class="field"><label>Conjonctive bulb.</label><input id="bm_conjonctive" data-label="Conjonctive bulbaire" type="text"></div>
+          <div class="field"><label>Limbe</label><input id="bm_limbe" data-label="Limbe" type="text"></div>
+          <div class="field field-full"><label>Cornée</label><input id="bm_cornee" data-label="Cornée" type="text"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ESSAI LENTILLE -->
+    <div class="section" id="sec-essai">
+      <div class="section-header" onclick="toggleSection('essai')">
+        <div class="section-title">Essai Lentille</div>
+        <div class="section-meta">
+          <span class="fill-count zero" id="count-essai">0 champs</span>
+          <span class="chevron">▼</span>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="field-grid">
+          <div class="field"><label>Fabricant</label><input id="e_fabricant" data-label="Fabricant lentille" type="text"></div>
+          <div class="field"><label>Nom lentille</label><input id="e_nom" data-label="Nom lentille" type="text"></div>
+          <div class="field"><label>Puissance OD</label><input id="e_puiss_od" data-label="Puissance OD" type="text"></div>
+          <div class="field"><label>Puissance OG</label><input id="e_puiss_og" data-label="Puissance OG" type="text"></div>
+          <div class="field"><label>Rayon OD</label><input id="e_rayon_od" data-label="Rayon OD" type="text"></div>
+          <div class="field"><label>Rayon OG</label><input id="e_rayon_og" data-label="Rayon OG" type="text"></div>
+          <div class="field"><label>Diamètre OD</label><input id="e_diam_od" data-label="Diamètre OD" type="text"></div>
+          <div class="field"><label>Diamètre OG</label><input id="e_diam_og" data-label="Diamètre OG" type="text"></div>
+          <div class="field"><label>Matériaux</label><input id="e_mat" data-label="Matériaux" type="text"></div>
+          <div class="field"><label>Dk/e</label><input id="e_dke" data-label="Dk/e" type="text"></div>
+          <div class="field"><label>Type de port</label><input id="e_port" data-label="Type de port" type="text"></div>
+          <div class="field"><label>Renouvellement</label><input id="e_renouv" data-label="Renouvellement" type="text"></div>
+        </div>
+        <div class="eye-section-title" style="margin-top:14px">Évaluation en portée</div>
+        <div class="field-grid">
+          <div class="field"><label>Centrage OD</label><input id="e_centrage_od" data-label="Centrage OD" type="text"></div>
+          <div class="field"><label>Centrage OG</label><input id="e_centrage_og" data-label="Centrage OG" type="text"></div>
+          <div class="field"><label>Mobilité OD</label><input id="e_mobilite_od" data-label="Mobilité OD" type="text"></div>
+          <div class="field"><label>Mobilité OG</label><input id="e_mobilite_og" data-label="Mobilité OG" type="text"></div>
+          <div class="field"><label>Confort OD</label><input id="e_confort_od" data-label="Confort essai OD" type="text"></div>
+          <div class="field"><label>Confort OG</label><input id="e_confort_og" data-label="Confort essai OG" type="text"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONCLUSION -->
+    <div class="section" id="sec-conclu">
+      <div class="section-header" onclick="toggleSection('conclu')">
+        <div class="section-title">Conclusion</div>
+        <div class="section-meta">
+          <span class="fill-count zero" id="count-conclu">0 champs</span>
+          <span class="chevron">▼</span>
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="field">
+          <label>Conclusion choix lentille</label>
+          <textarea id="conclu_choix" data-label="Conclusion choix lentille" rows="3"></textarea>
+        </div>
+        <div class="field" style="margin-top:8px">
+          <label>Conseils entretien & suivi</label>
+          <textarea id="conclu_conseils" data-label="Conseils entretien et suivi" rows="3"></textarea>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- LOG -->
+  <div class="log">
+    <div class="log-title">Journal de session</div>
+    <div class="log-entries" id="logEntries">
+      <div class="log-entry"><span class="time">--:--</span><span class="msg">En attente…</span></div>
+    </div>
+  </div>
+
+  <button class="export-btn" onclick="exportData()">📋 Exporter le récapitulatif</button>
+
+</div>
+
+<script>
+// ─── STATE ──────────────────────────────────────────────
+let apiKey = localStorage.getItem('cct_api_key') || '';
+let isRecording = false;
+let mediaRecorder = null;
+let audioChunks = [];
+let sessionStart = Date.now();
+let conversationHistory = [];
+
+// ─── INIT ──────────────────────────────────────────────
+document.getElementById('apiKey').value = apiKey;
+if (apiKey) document.getElementById('apiSetup').style.opacity = '0.5';
+
+function saveKey(val) {
+  apiKey = val;
+  localStorage.setItem('cct_api_key', val);
+}
+
+// Session timer
+setInterval(() => {
+  const elapsed = Math.floor((Date.now() - sessionStart) / 1000);
+  const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const s = String(elapsed % 60).padStart(2, '0');
+  document.getElementById('sessionTime').textContent = `Session: ${m}:${s}`;
+}, 1000);
+
+// ─── SECTIONS ──────────────────────────────────────────
+function toggleSection(id) {
+  const el = document.getElementById('sec-' + id);
+  el.classList.toggle('open');
+}
+
+// ─── FIELD TRACKING ────────────────────────────────────
+const sectionFields = {
+  av: ['av_od_vl','av_od_vp','av_od_confort','av_og_vl','av_og_vp','av_og_confort','av_odg_vl','av_odg_vp','av_odg_confort'],
+  kerato: ['k_od_kerat','k_od_ast_corn','k_od_ast_tot','k_od_ast_int','k_od_exc','k_og_kerat','k_og_ast_corn','k_og_ast_tot','k_og_ast_int','k_og_exc'],
+  bio: ['bio_od_dhiv','bio_od_pup','bio_od_fp','bio_od_rec','bio_od_psc','bio_od_tonus','bio_od_amp','bio_od_freq','bio_og_dhiv','bio_og_pup','bio_og_fp','bio_og_rec','bio_og_psc','bio_og_tonus','bio_og_amp','bio_og_freq'],
+  biomicro: ['bm_hautrl','bm_but','bm_film','bm_endo','bm_paupieres','bm_retournement','bm_conjonctive','bm_limbe','bm_cornee'],
+  essai: ['e_fabricant','e_nom','e_puiss_od','e_puiss_og','e_rayon_od','e_rayon_og','e_diam_od','e_diam_og','e_mat','e_dke','e_port','e_renouv','e_centrage_od','e_centrage_og','e_mobilite_od','e_mobilite_og','e_confort_od','e_confort_og'],
+  conclu: ['conclu_choix','conclu_conseils']
+};
+
+function updateCounts() {
+  for (const [sec, fields] of Object.entries(sectionFields)) {
+    const filled = fields.filter(id => {
+      const el = document.getElementById(id);
+      return el && el.value.trim() !== '';
+    }).length;
+    const badge = document.getElementById('count-' + sec);
+    badge.textContent = filled + ' champ' + (filled > 1 ? 's' : '');
+    badge.className = 'fill-count' + (filled === 0 ? ' zero' : '');
+  }
+}
+
+// ─── MIC ───────────────────────────────────────────────
+async function toggleMic() {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    await startRecording();
+  }
+}
+
+async function startRecording() {
+  if (!apiKey) {
+    setFeedback('🔑', 'Clé API manquante');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = processAudio;
+    mediaRecorder.start();
+    isRecording = true;
+    document.getElementById('micBtn').classList.add('recording');
+    document.getElementById('micBtn').textContent = '⏹';
+    document.getElementById('micLabel').textContent = 'Enregistrement… (appuie pour stopper)';
+    document.getElementById('micZone').classList.add('active');
+    setFeedback('🎙️', '');
+    document.getElementById('transcript').textContent = '…';
+    document.getElementById('transcript').classList.remove('empty');
+  } catch(e) {
+    setFeedback('❌', 'Micro inaccessible');
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+    mediaRecorder.stream.getTracks().forEach(t => t.stop());
+  }
+  isRecording = false;
+  document.getElementById('micBtn').classList.remove('recording');
+  document.getElementById('micBtn').classList.add('processing');
+  document.getElementById('micBtn').textContent = '⏳';
+  document.getElementById('micLabel').textContent = 'Traitement…';
+  document.getElementById('micZone').classList.remove('active');
+}
+
+async function processAudio() {
+  const blob = new Blob(audioChunks, { type: 'audio/webm' });
+
+  // Convert to base64
+  const b64 = await new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+    reader.readAsDataURL(blob);
+  });
+
+  // Get current state of all fields for context
+  const filledFields = getAllFields();
+
+  // Build the system prompt
+  const systemPrompt = `Tu es l'assistant d'un optométriste qui dicte ses mesures pendant une consultation d'adaptation lentilles de contact.
+
+Ton rôle :
+1. Transcrire ce que dit l'optométriste
+2. Identifier quels champs de la fiche CCT sont mentionnés
+3. Extraire les valeurs
+4. Répondre UNIQUEMENT par le son/mot de confirmation "✓" ou "Noté" ou "OK" (1 mot max) si tu as bien compris et extrait des données
+5. Si tu n'as pas compris, répond "?" 
+6. Si c'est une question ou remarque (pas une mesure), réponds brièvement en 1-2 mots max
+
+Champs disponibles dans la fiche :
+- AV brut : AV VL OD/OG/ODG, AV VP OD/OG/ODG, Confort OD/OG/ODG
+- Kératométrie : Kératométrie OD/OG (format RxR), Astigmatisme cornéen/total/interne OD/OG, Excentricité OD/OG
+- Biométrie : DHIV OD/OG, Diamètre pupille OD/OG, FP OD/OG, Recouvrement supérieur OD/OG, PSC OD/OG, Tonus palpébral OD/OG, Amplitude clignement OD/OG, Fréquence clignement OD/OG
+- Biomicroscopie : Hauteur RL, BUT, Film de larme, Endothélium, Diffus paupières, Retournement palpébral, Conjonctive bulbaire, Limbe, Cornée
+- Essai lentille : Fabricant, Nom, Puissance OD/OG, Rayon OD/OG, Diamètre OD/OG, Matériaux, Dk/e, Type de port, Renouvellement, Centrage OD/OG, Mobilité OD/OG, Confort essai OD/OG
+- Conclusion : Conclusion choix lentille, Conseils entretien et suivi
+
+Réponds TOUJOURS en JSON avec cette structure :
+{
+  "transcription": "ce que l'optométriste a dit",
+  "confirmation": "✓" ou "?" ou réponse courte,
+  "fields": [
+    {"id": "id_du_champ", "value": "valeur"}
+  ]
+}
+
+Les IDs des champs sont exactement : av_od_vl, av_od_vp, av_od_confort, av_og_vl, av_og_vp, av_og_confort, av_odg_vl, av_odg_vp, av_odg_confort, k_od_kerat, k_od_ast_corn, k_od_ast_tot, k_od_ast_int, k_od_exc, k_og_kerat, k_og_ast_corn, k_og_ast_tot, k_og_ast_int, k_og_exc, bio_od_dhiv, bio_od_pup, bio_od_fp, bio_od_rec, bio_od_psc, bio_od_tonus, bio_od_amp, bio_od_freq, bio_og_dhiv, bio_og_pup, bio_og_fp, bio_og_rec, bio_og_psc, bio_og_tonus, bio_og_amp, bio_og_freq, bm_hautrl, bm_but, bm_film, bm_endo, bm_paupieres, bm_retournement, bm_conjonctive, bm_limbe, bm_cornee, e_fabricant, e_nom, e_puiss_od, e_puiss_og, e_rayon_od, e_rayon_og, e_diam_od, e_diam_og, e_mat, e_dke, e_port, e_renouv, e_centrage_od, e_centrage_og, e_mobilite_od, e_mobilite_og, e_confort_od, e_confort_og, conclu_choix, conclu_conseils`;
+
+  try {
+    // Use Claude API with audio transcription approach
+    // Since Claude doesn't do direct audio, we use Web Speech API fallback
+    // But we'll send the transcription to Claude for parsing
+    
+    // First, try Web Speech API for transcription
+    const transcription = await transcribeWithWebSpeech(blob);
+    
+    if (!transcription) {
+      setFeedback('?', 'Pas compris');
+      resetMicBtn();
+      return;
+    }
+
+    document.getElementById('transcript').textContent = transcription;
+
+    // Add to conversation history
+    conversationHistory.push({
+      role: "user",
+      content: `L'optométriste dit : "${transcription}"`
+    });
+
+    // Send to Claude for field extraction
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: systemPrompt,
+        messages: conversationHistory
+      })
+    });
+
+    const data = await response.json();
+    const rawText = data.content?.[0]?.text || '{}';
+
+    let parsed;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(clean);
+    } catch {
+      parsed = { confirmation: '?', fields: [], transcription: transcription };
+    }
+
+    // Add assistant response to history
+    conversationHistory.push({
+      role: "assistant",
+      content: rawText
+    });
+
+    // Keep history manageable
+    if (conversationHistory.length > 20) {
+      conversationHistory = conversationHistory.slice(-16);
+    }
+
+    // Fill fields
+    if (parsed.fields && parsed.fields.length > 0) {
+      parsed.fields.forEach(f => {
+        const el = document.getElementById(f.id);
+        if (el) {
+          el.value = f.value;
+          el.classList.add('filled');
+          // Open the section that contains this field
+          openSectionForField(f.id);
+        }
+      });
+      updateCounts();
+      addLog(parsed.transcription || transcription, parsed.fields.length + ' champ(s) rempli(s)');
+    } else {
+      addLog(parsed.transcription || transcription, 'Aucun champ extrait');
+    }
+
+    // Show confirmation
+    const conf = parsed.confirmation || '✓';
+    setFeedback(conf, '');
+    speakConfirmation(conf);
+
+  } catch(err) {
+    console.error(err);
+    setFeedback('❌', 'Erreur API');
+    addLog('Erreur', err.message);
+  }
+
+  resetMicBtn();
+}
+
+// Web Speech API transcription
+function transcribeWithWebSpeech(blob) {
+  return new Promise((resolve) => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      // Fallback: ask user to type
+      const text = prompt('Transcription manuelle (micro non supporté) :');
+      resolve(text || '');
+      return;
+    }
+    // We already have the recording, use SpeechRecognition live on next attempt
+    // For now, replay approach
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'fr-FR';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    
+    recognition.onresult = (e) => resolve(e.results[0][0].transcript);
+    recognition.onerror = () => resolve('');
+    recognition.onend = () => {};
+    
+    // Since we can't replay blob into SpeechRecognition, return empty and use live approach
+    resolve(null);
+  });
+}
+
+// Override: use live SpeechRecognition instead
+let liveTranscript = '';
+
+async function startRecording() {
+  if (!apiKey) {
+    setFeedback('🔑', 'Clé API manquante — entre ta clé en haut');
+    return;
+  }
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    setFeedback('❌', 'Micro non supporté sur ce navigateur');
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'fr-FR';
+  recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
+  recognition.continuous = false;
+
+  recognition.onstart = () => {
+    isRecording = true;
+    document.getElementById('micBtn').classList.add('recording');
+    document.getElementById('micBtn').textContent = '⏹';
+    document.getElementById('micLabel').textContent = 'Enregistrement… (appuie pour stopper)';
+    document.getElementById('micZone').classList.add('active');
+    document.getElementById('transcript').textContent = '…';
+    document.getElementById('transcript').classList.remove('empty');
+  };
+
+  recognition.onresult = (e) => {
+    let interim = '';
+    let final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    document.getElementById('transcript').textContent = (final || interim) || '…';
+    if (final) liveTranscript = final;
+  };
+
+  recognition.onend = async () => {
+    isRecording = false;
+    document.getElementById('micBtn').classList.remove('recording');
+    document.getElementById('micBtn').classList.add('processing');
+    document.getElementById('micBtn').textContent = '⏳';
+    document.getElementById('micLabel').textContent = 'Analyse…';
+    document.getElementById('micZone').classList.remove('active');
+
+    const text = liveTranscript || document.getElementById('transcript').textContent;
+    if (!text || text === '…') {
+      setFeedback('?', 'Rien détecté');
+      resetMicBtn();
+      return;
+    }
+
+    await sendToClaude(text);
+    resetMicBtn();
+  };
+
+  recognition.onerror = (e) => {
+    setFeedback('❌', 'Erreur micro');
+    resetMicBtn();
+  };
+
+  window._recognition = recognition;
+  liveTranscript = '';
+  recognition.start();
+}
+
+function stopRecording() {
+  if (window._recognition) {
+    window._recognition.stop();
+  }
+}
+
+async function sendToClaude(transcription) {
+  const systemPrompt = `Tu es l'assistant d'un optométriste qui dicte ses mesures pendant une consultation d'adaptation lentilles de contact.
+
+Ton rôle : extraire les mesures et identifier les champs correspondants dans la fiche CCT.
+
+Réponds UNIQUEMENT en JSON :
+{
+  "confirmation": "✓" si données extraites, "?" si incompris, ou réponse 1-2 mots si c'est une question,
+  "fields": [{"id": "id_exact", "value": "valeur"}]
+}
+
+IDs disponibles : av_od_vl, av_od_vp, av_od_confort, av_og_vl, av_og_vp, av_og_confort, av_odg_vl, av_odg_vp, av_odg_confort, k_od_kerat, k_od_ast_corn, k_od_ast_tot, k_od_ast_int, k_od_exc, k_og_kerat, k_og_ast_corn, k_og_ast_tot, k_og_ast_int, k_og_exc, bio_od_dhiv, bio_od_pup, bio_od_fp, bio_od_rec, bio_od_psc, bio_od_tonus, bio_od_amp, bio_od_freq, bio_og_dhiv, bio_og_pup, bio_og_fp, bio_og_rec, bio_og_psc, bio_og_tonus, bio_og_amp, bio_og_freq, bm_hautrl, bm_but, bm_film, bm_endo, bm_paupieres, bm_retournement, bm_conjonctive, bm_limbe, bm_cornee, e_fabricant, e_nom, e_puiss_od, e_puiss_og, e_rayon_od, e_rayon_og, e_diam_od, e_diam_og, e_mat, e_dke, e_port, e_renouv, e_centrage_od, e_centrage_og, e_mobilite_od, e_mobilite_og, e_confort_od, e_confort_og, conclu_choix, conclu_conseils
+
+Exemples :
+- "OD kératométrie 7.8 sur 7.6" → {"id":"k_od_kerat","value":"7.8 / 7.6"}
+- "BUT 8 secondes OD" → {"id":"bm_but","value":"8s"}
+- "acuité de loin OD 10 sur 10" → {"id":"av_od_vl","value":"10/10"}
+- "lentille Cooper Vision Biofinity" → [{"id":"e_fabricant","value":"CooperVision"},{"id":"e_nom","value":"Biofinity"}]`;
+
+  conversationHistory.push({ role: "user", content: transcription });
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 800,
+        system: systemPrompt,
+        messages: conversationHistory
+      })
+    });
+
+    const data = await response.json();
+    const rawText = data.content?.[0]?.text || '{}';
+
+    let parsed;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(clean);
+    } catch {
+      parsed = { confirmation: '?', fields: [] };
+    }
+
+    conversationHistory.push({ role: "assistant", content: rawText });
+    if (conversationHistory.length > 24) conversationHistory = conversationHistory.slice(-20);
+
+    if (parsed.fields && parsed.fields.length > 0) {
+      parsed.fields.forEach(f => {
+        const el = document.getElementById(f.id);
+        if (el) {
+          el.value = f.value;
+          el.classList.add('filled');
+          openSectionForField(f.id);
+        }
+      });
+      updateCounts();
+      addLog(transcription, parsed.fields.length + ' champ(s) → ' + parsed.fields.map(f=>f.id).join(', '));
+    } else {
+      addLog(transcription, parsed.confirmation || '?');
+    }
+
+    const conf = parsed.confirmation || '✓';
+    setFeedback(conf, '');
+    speakConfirmation(conf);
+
+  } catch(err) {
+    setFeedback('❌', 'Erreur');
+    addLog('Erreur API', err.message);
+  }
+}
+
+function openSectionForField(fieldId) {
+  for (const [sec, fields] of Object.entries(sectionFields)) {
+    if (fields.includes(fieldId)) {
+      document.getElementById('sec-' + sec).classList.add('open');
+    }
+  }
+}
+
+function resetMicBtn() {
+  document.getElementById('micBtn').classList.remove('recording', 'processing');
+  document.getElementById('micBtn').textContent = '🎤';
+  document.getElementById('micLabel').textContent = 'Appuyer pour dicter';
+}
+
+// ─── FEEDBACK ──────────────────────────────────────────
+function setFeedback(emoji, label) {
+  const fb = document.getElementById('feedback');
+  fb.textContent = emoji;
+  fb.className = 'feedback ok';
+  if (label) document.getElementById('micLabel').textContent = label;
+}
+
+function speakConfirmation(text) {
+  if ('speechSynthesis' in window) {
+    const utt = new SpeechSynthesisUtterance(text === '✓' ? 'Noté' : text);
+    utt.lang = 'fr-FR';
+    utt.volume = 0.7;
+    utt.rate = 1.2;
+    speechSynthesis.speak(utt);
+  }
+}
+
+// ─── LOG ───────────────────────────────────────────────
+function addLog(transcription, action) {
+  const now = new Date();
+  const time = now.toTimeString().slice(0,5);
+  const entries = document.getElementById('logEntries');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `<span class="time">${time}</span><span class="msg">"${transcription.slice(0,40)}${transcription.length>40?'…':''}" → ${action}</span>`;
+  entries.appendChild(entry);
+  entries.scrollTop = entries.scrollHeight;
+}
+
+// ─── HELPERS ───────────────────────────────────────────
+function getAllFields() {
+  const result = {};
+  document.querySelectorAll('input[data-label], textarea[data-label]').forEach(el => {
+    if (el.value.trim()) result[el.dataset.label] = el.value.trim();
+  });
+  return result;
+}
+
+function updateSession() {}
+
+// ─── EXPORT ────────────────────────────────────────────
+function exportData() {
+  const pseudo = document.getElementById('patientPseudo').value || 'Patient';
+  const dob = document.getElementById('patientDob').value || '--';
+  const now = new Date().toLocaleDateString('fr-FR');
+
+  let text = `CCT — ADAPTATION LENTILLES\n`;
+  text += `Patient : ${pseudo} | DDN : ${dob} | Date : ${now}\n`;
+  text += `${'─'.repeat(50)}\n\n`;
+
+  const sections = {
+    'AV BRUT': ['av_od_vl','av_od_vp','av_od_confort','av_og_vl','av_og_vp','av_og_confort','av_odg_vl','av_odg_vp','av_odg_confort'],
+    'KÉRATOMÉTRIE': ['k_od_kerat','k_od_ast_corn','k_od_ast_tot','k_od_ast_int','k_od_exc','k_og_kerat','k_og_ast_corn','k_og_ast_tot','k_og_ast_int','k_og_exc'],
+    'BIOMÉTRIE': ['bio_od_dhiv','bio_od_pup','bio_od_fp','bio_od_rec','bio_od_psc','bio_od_tonus','bio_od_amp','bio_od_freq','bio_og_dhiv','bio_og_pup','bio_og_fp','bio_og_rec','bio_og_psc','bio_og_tonus','bio_og_amp','bio_og_freq'],
+    'BIOMICROSCOPIE': ['bm_hautrl','bm_but','bm_film','bm_endo','bm_paupieres','bm_retournement','bm_conjonctive','bm_limbe','bm_cornee'],
+    'ESSAI LENTILLE': ['e_fabricant','e_nom','e_puiss_od','e_puiss_og','e_rayon_od','e_rayon_og','e_diam_od','e_diam_og','e_mat','e_dke','e_port','e_renouv','e_centrage_od','e_centrage_og','e_mobilite_od','e_mobilite_og','e_confort_od','e_confort_og'],
+    'CONCLUSION': ['conclu_choix','conclu_conseils']
+  };
+
+  for (const [title, ids] of Object.entries(sections)) {
+    const filled = ids.filter(id => document.getElementById(id)?.value?.trim());
+    if (filled.length === 0) continue;
+    text += `${title}\n`;
+    filled.forEach(id => {
+      const el = document.getElementById(id);
+      text += `  ${el.dataset.label} : ${el.value}\n`;
+    });
+    text += '\n';
+  }
+
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `CCT_${pseudo.replace(/\s/g,'_')}_${now.replace(/\//g,'-')}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
